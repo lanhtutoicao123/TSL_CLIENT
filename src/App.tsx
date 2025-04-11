@@ -54,10 +54,12 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      
+      const baseUrl = import.meta.env.VITE_API_BASE_URL;
 
       const endpoint = activeTab === 'encode' ? '/api/files/upload' : '/api/files/decode';
 
-      const response = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
+      const response = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         body: formData,
       });
