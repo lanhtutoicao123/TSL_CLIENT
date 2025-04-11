@@ -4,6 +4,11 @@ import { ProcessingResult } from './components/ProcessingResult';
 import { TabSelector } from './components/TabSelector';
 import { FileText } from 'lucide-react';
 
+interface HeapStep {
+  step: number;
+  heap: [string, number][];
+}
+
 interface ProcessingResultData {
   encodedData: string;
   crc: number;
@@ -15,6 +20,9 @@ interface ProcessingResultData {
   compressionRatio: number;
   codes: Record<string, string>;
   treeImageBase64?: string;
+  frequencies?: Record<string, number>;
+  probabilities?: Record<string, number>;
+  buildSteps?: HeapStep[];
 }
 
 interface ApiResponse {
@@ -26,6 +34,10 @@ interface ApiResponse {
   tree_image_base64?: string;
   message?: string;
   originalSize?: number;
+  frequencies?: Record<string, number>;
+  probabilities?: Record<string, number>;
+  buildSteps?: { step: number; heap: [string, string | number][] }[];
+  build_steps?: { step: number; heap: [string, string | number][] }[];
 }
 
 function App() {
@@ -42,10 +54,10 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const endpoint = activeTab === 'encode' ? '/api/files/upload' : '/api/files/decode';
-      console.log(`Sending file to endpoint: ${endpoint}`);
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
+      const endpoint = activeTab === 'encode' ? '/api/files/upload' : '/api/files/decode';
+
+      const response = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
         method: 'POST',
         body: formData,
       });
@@ -55,7 +67,10 @@ function App() {
       }
 
       const data: ApiResponse = await response.json();
-      console.log('Server data:', data);
+      console.log('📦 Server raw data:', data);
+
+      const buildSteps = data.buildSteps || data.build_steps || [];
+      console.log('🧱 buildSteps received:', buildSteps);
 
       if (!data.encodedData && !data.message) {
         throw new Error('Dữ liệu trả về không đầy đủ');
@@ -65,9 +80,9 @@ function App() {
       const compressedSize = new TextEncoder().encode(encodedString).length;
       const originalSize = file.size;
 
-      setResults({
+      const result: ProcessingResultData = {
         encodedData: encodedString,
-        crc: data.crc || 0,
+        crc: data.crc ?? 0,
         downloadUrl: data.downloadUrl,
         filename: data.filename || file.name,
         originalSize,
@@ -78,9 +93,14 @@ function App() {
           : 0,
         codes: data.codes || {},
         treeImageBase64: data.tree_image_base64,
-      });
+        frequencies: data.frequencies || {},
+        probabilities: data.probabilities || {},
+        buildSteps: buildSteps as HeapStep[],
+      };
+
+      setResults(result);
     } catch (err) {
-      console.error('Error occurred:', err);
+      console.error('❌ Error occurred:', err);
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
     } finally {
       setIsProcessing(false);
@@ -95,18 +115,22 @@ function App() {
             <FileText className="h-12 w-12 text-blue-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Bộ Xử Lý File Huffman</h1>
-          <p className="mt-2 text-gray-600">Tải lên file để nén hoặc giải nén sử dụng mã hóa Huffman và xác minh CRC</p>
+          <p className="mt-2 text-gray-600">
+            Tải lên file để nén hoặc giải nén sử dụng mã hóa Huffman và xác minh CRC
+          </p>
         </div>
 
-        <div className="mb-6">
-          <TabSelector activeTab={activeTab} onTabChange={setActiveTab} />
-        </div>
+        <TabSelector activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <FileUpload
-          onFileSelect={handleFileSelect}
-          acceptedTypes={activeTab === 'decode' ? '.huf' : undefined}
-          label={activeTab === 'encode' ? 'Kéo và thả file để nén' : 'Kéo và thả file .huf để giải nén'}
-        />
+        <div className="mt-4">
+          <FileUpload
+            onFileSelect={handleFileSelect}
+            acceptedTypes={activeTab === 'decode' ? '.huf' : undefined}
+            label={activeTab === 'encode'
+              ? 'Kéo và thả file để nén'
+              : 'Kéo và thả file .huf để giải nén'}
+          />
+        </div>
 
         {isProcessing && (
           <div className="mt-6 text-center">
